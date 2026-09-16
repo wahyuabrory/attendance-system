@@ -1,0 +1,11 @@
+.git
+.github
+.scratch
+.env
+.env.*
+!.env.example
+.venv
+__pycache__
+*.pyc
+models/*.onnx
+calibration

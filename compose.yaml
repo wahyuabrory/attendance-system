@@ -1,0 +1,50 @@
+services:
+  db:
+    image: pgvector/pgvector:0.8.0-pg16
+    environment:
+      POSTGRES_DB: attendance
+      POSTGRES_USER: attendance
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-attendance-local-only}
+    volumes:
+      - attendance-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U attendance -d attendance"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  migrate:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ATTENDANCE_DATABASE_URL: postgresql+asyncpg://attendance:${POSTGRES_PASSWORD:-attendance-local-only}@db:5432/attendance
+    command: ["alembic", "upgrade", "head"]
+
+  api:
+    build: .
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      ATTENDANCE_ENVIRONMENT: ${ATTENDANCE_ENVIRONMENT:-development}
+      ATTENDANCE_DATABASE_URL: postgresql+asyncpg://attendance:${POSTGRES_PASSWORD:-attendance-local-only}@db:5432/attendance
+      ATTENDANCE_ADMIN_API_KEY: ${ATTENDANCE_ADMIN_API_KEY:?set ATTENDANCE_ADMIN_API_KEY in .env}
+      ATTENDANCE_TERMINAL_API_KEY: ${ATTENDANCE_TERMINAL_API_KEY:?set ATTENDANCE_TERMINAL_API_KEY in .env}
+      ATTENDANCE_TOKEN_SIGNING_KEY: ${ATTENDANCE_TOKEN_SIGNING_KEY:?set ATTENDANCE_TOKEN_SIGNING_KEY in .env}
+      ATTENDANCE_MODEL_DIR: /opt/models
+      ATTENDANCE_CALIBRATION_PATH: ${ATTENDANCE_CALIBRATION_PATH:-}
+    ports:
+      - "127.0.0.1:8000:8000"
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+volumes:
+  attendance-db:

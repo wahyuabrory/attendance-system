@@ -1,0 +1,42 @@
+name: validation
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: pgvector/pgvector:0.8.0-pg16
+        env:
+          POSTGRES_DB: attendance
+          POSTGRES_USER: attendance
+          POSTGRES_PASSWORD: attendance-ci-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U attendance -d attendance"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      ATTENDANCE_DATABASE_URL: postgresql+asyncpg://attendance:attendance-ci-only@127.0.0.1:5432/attendance
+      ATTENDANCE_TEST_DATABASE_URL: postgresql+asyncpg://attendance:attendance-ci-only@127.0.0.1:5432/attendance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.14"
+      - run: uv python install 3.12.13
+      - run: uv sync --locked
+      - run: uv run ruff format --check .
+      - run: uv run ruff check .
+      - run: uv run mypy attendance_system
+      - run: uv run alembic upgrade head
+      - run: uv run pytest
+      - run: docker build --tag attendance-system:validation .
