@@ -1,13 +1,17 @@
-FROM ghcr.io/astral-sh/uv:0.11.14 AS build
+FROM python:3.12.13-slim-bookworm AS build
+
+COPY --from=ghcr.io/astral-sh/uv:0.11.14 /uv /uvx /bin/
 
 WORKDIR /build
-ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
-COPY .python-version pyproject.toml uv.lock README.md ./
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/app/.venv
+COPY .python-version pyproject.toml uv.lock README.md LICENSE ./
 COPY attendance_system ./attendance_system
 COPY alembic.ini ./alembic.ini
 COPY alembic ./alembic
-RUN uv sync --frozen --no-dev
-RUN uv run attendance-system download-models --directory /opt/models
+RUN uv sync --frozen --no-dev --no-editable
+RUN /app/.venv/bin/attendance-system download-models --directory /opt/models
 
 FROM python:3.12.13-slim-bookworm AS runtime
 
@@ -19,7 +23,7 @@ RUN apt-get update \
     && apt-get install --no-install-recommends -y libglib2.0-0 libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY --from=build /build/.venv /app/.venv
+COPY --from=build /app/.venv /app/.venv
 COPY --from=build /build/attendance_system /app/attendance_system
 COPY --from=build /build/alembic.ini /app/alembic.ini
 COPY --from=build /build/alembic /app/alembic
